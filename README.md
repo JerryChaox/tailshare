@@ -40,16 +40,42 @@ You also need `tailcat` (`brew install tailcat`; other platforms are listed in
 
 ## How it works
 
-```
-your machine ── outbound ──▶ relay (DERP) ◀── outbound ── guest
-      └──────────── WireGuard, end to end ─────────────┘
+The environment is the hub. People and their agents connect to it, never to
+each other, and a WireGuard key is their identity.
+
+```mermaid
+flowchart LR
+    G1["Collaborator A<br/>+ their agent"]
+    G2["Collaborator B<br/>+ their agent"]
+    ME["You<br/>(other devices stay private)"]
+    R(["Relay<br/>forwards encrypted packets,<br/>tries a direct path"])
+    ENV[("Your environment<br/>web app ports · agent shell<br/>laptop, VM, dev box or container")]
+
+    G1 -- "key on the allow list" --> R
+    G2 -- "key on the allow list" --> R
+    ME -- "own key / shared device" --> R
+    R ==> ENV
+    G1 -. "✕ no path" .- G2
 ```
 
-Both sides dial out, so nothing listens on the internet. The relay only
-forwards encrypted packets and tries to set up a direct path. Who gets in is
-decided by WireGuard keys: the guest sends you a public `nodekey:...`, and you
-add it to `--allow`. A copied public key can't impersonate anyone, because
-the handshake needs the matching private key.
+1. **Join:** the guest makes a key pair and sends you only the public half
+   (Tailcat `nodekey:...`), or signs in with their Tailscale account.
+2. **Allow:** you add that key to `--allow` (Tailcat), or grant that user one
+   port on the workspace (Tailscale policy).
+3. **Connect:** both sides dial out to a relay, so nothing listens on the
+   internet. The WireGuard handshake needs the matching private key, so a
+   copied public key can't impersonate anyone.
+4. **Work:** everyone reaches the same app and sessions, so they all see the
+   same state. The app can tell who is connected from the key, with no extra
+   login.
+
+| | Tailcat | Tailscale |
+|---|---|---|
+| Identity | client key `nodekey:...` | account + device |
+| Who gets in | `--allow` list, SSH keys | policy grants |
+| Invite | send the `tc...` address, add their key | invite to a team tailnet |
+| Isolation between guests | built in (no tailnet) | grant nothing between them |
+| Best for | ad-hoc, no accounts, browser-only guests | ongoing teams, phones, fine-grained policy |
 
 ## Repository layout
 
