@@ -26,6 +26,7 @@ what they need to reach.
 | Guest's agent needs a shell in this environment | Tailcat `ssh` / `no-auth-ssh` + `--allow` (or Tailscale SSH if both are on a tailnet) |
 | Guest only has a browser, can't install anything | Tailcat + browser loader (slow, relay only) |
 | Ongoing team, many machines, stable names wanted | Tailscale |
+| Team works on one shared VM; keep your own devices private | Tailscale team tailnet + share the VM to yourself (references/tailscale.md, "team machine") |
 | Guest is on a phone | Tailscale |
 | Anyone on the internet should open it | Tailscale Funnel |
 

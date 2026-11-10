@@ -1,14 +1,14 @@
 # tailshare
 
-An agent skill for sharing your dev environment with people and their AI
-agents over a private WireGuard tunnel: no public IP, no port forwarding, no
-server of your own.
+Share your dev environment with people and their AI agents over a private
+WireGuard tunnel: no public IP, no port forwarding, no server of your own.
 
 Ask your agent things like:
 
 - "Let Alice see the app on port 3000."
 - "Let Bob's agent SSH in and fix the failing test."
 - "Connect me to the environment Carol sent me: tc..."
+- "Set up a team VM my teammates can use without seeing my other devices."
 
 It picks the right tool for the job:
 
@@ -23,17 +23,20 @@ explicit ports, and no public addresses.
 
 ## Install
 
-Claude Code:
+Claude Code (as a plugin):
 
-```sh
-git clone https://github.com/JerryChaox/tailshare ~/.claude/skills/tailshare
+```
+/plugin install tailshare --marketplace JerryChaox/tailshare
 ```
 
-For other agents that read `SKILL.md` skills, clone it into that agent's
-skills folder.
+On older Claude Code, run `/plugin marketplace add JerryChaox/tailshare`
+first, then `/plugin install tailshare@tailshare`.
+
+Other agents that read `SKILL.md` skills: copy
+[`skills/tailshare`](skills/tailshare) into that agent's skills folder.
 
 You also need `tailcat` (`brew install tailcat`; other platforms are listed in
-[references/tailcat.md](references/tailcat.md)) and/or `tailscale`.
+[tailcat.md](skills/tailshare/references/tailcat.md)) and/or `tailscale`.
 
 ## How it works
 
@@ -48,16 +51,18 @@ decided by WireGuard keys: the guest sends you a public `nodekey:...`, and you
 add it to `--allow`. A copied public key can't impersonate anyone, because
 the handshake needs the matching private key.
 
-## What's inside
+## Repository layout
 
-- [SKILL.md](SKILL.md): when to use which tool, the share/join recipes and
-  the safety rules
-- [references/tailcat.md](references/tailcat.md): commands, keys, address
-  stability and gotchas
-- [references/tailscale.md](references/tailscale.md): serve, funnel, node
-  sharing and SSH
-- [references/browser.md](references/browser.md): opening a shared web app
-  from a browser with nothing installed (Tailcat in WebAssembly plus a
-  Service Worker), and its limits
+```
+.claude-plugin/        plugin and marketplace manifests
+skills/tailshare/      the agent skill
+  SKILL.md             which tool to use, share/join recipes, safety rules
+  references/
+    tailcat.md         commands, keys, stable addresses, gotchas
+    tailscale.md       serve, funnel, node sharing, SSH, the team-VM pattern
+    browser.md         opening a shared web app from a browser, nothing installed
+```
+
+More (a CLI, a browser opener) will land in their own top-level folders.
 
 Not affiliated with Tailscale. MIT licensed.

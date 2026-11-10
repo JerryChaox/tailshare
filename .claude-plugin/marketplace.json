@@ -1,0 +1,11 @@
+{
+  "name": "tailshare",
+  "owner": { "name": "JerryChaox" },
+  "plugins": [
+    {
+      "name": "tailshare",
+      "source": "./",
+      "description": "Share your dev environment with people and their agents over Tailcat or Tailscale. No public IP, no server."
+    }
+  ]
+}

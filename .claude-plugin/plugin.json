@@ -1,0 +1,9 @@
+{
+  "name": "tailshare",
+  "description": "Share your dev environment with people and their agents over Tailcat or Tailscale. No public IP, no server.",
+  "version": "0.1.0",
+  "author": { "name": "JerryChaox" },
+  "homepage": "https://github.com/JerryChaox/tailshare",
+  "repository": "https://github.com/JerryChaox/tailshare",
+  "license": "MIT"
+}
