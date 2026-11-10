@@ -43,8 +43,8 @@ Tailcat, the common cases. Details and every flag: references/tailcat.md.
 # Stable address across restarts (do once). Without this the address can change.
 tailcat genkey --key=default --fixed-region
 
-# A web app on localhost:3000, visible as the guest's port 80
-tailcat serve --allow=nodekey:GUEST1,nodekey:GUEST2 80:127.0.0.1:3000
+# A web app on localhost:3000, visible as the guest's port 3000
+tailcat serve --allow=nodekey:GUEST1,nodekey:GUEST2 3000
 
 # Shell access for named collaborators' agents (keys from GitHub)
 tailcat serve --ssh-authorized-keys=alice@github ssh
@@ -63,8 +63,9 @@ references/tailscale.md.
 
 ```sh
 tailcat genkey --client --key=client-default   # prints nodekey:... → send it to the owner
-tailcat browse tc...                           # opens the shared port 80 in a browser
-tailcat forward tc... 18080:80                 # or map it to a fixed local port
+tailcat forward tc... 3000                     # then open http://localhost:3000
+tailcat forward tc... 18080:3000               # or pick another local port
+tailcat browse tc...                           # only when port 80 is served
 tailcat ssh user@tc...                         # shell, when ssh is served
 ```
 
