@@ -1,7 +1,8 @@
 # Tailcat reference
 
-Checked against tailcat at commit e00cdde (Nov 2026). `tailcat <cmd> --help`
-is the source of truth; rerun it if a flag below is rejected.
+Checked against tailcat v0.7.0, the latest release (Nov 2026).
+`tailcat <cmd> --help` is the source of truth; rerun it if a flag below is
+rejected.
 
 ## Install
 
@@ -44,9 +45,9 @@ tailcat genkey --list
 ## Serving
 
 ```sh
-tailcat serve 80:127.0.0.1:3000                    # guest's port 80 → local 3000
+tailcat serve 3000                                 # guest's port 3000 → local 3000
 tailcat serve 22,80,8000-8010                      # same ports on localhost
-tailcat serve --allow=nodekey:A,nodekey:B 80:127.0.0.1:3000
+tailcat serve --allow=nodekey:A,nodekey:B 3000
 tailcat serve --ssh-authorized-keys=alice@github ssh
 tailcat serve --ssh-authorized-keys="$HOME/.ssh/authorized_keys" ssh
 tailcat serve --allow=nodekey:A no-auth-ssh        # $TAILCAT_PEER_KEY in the session
@@ -56,6 +57,9 @@ TAILCAT_ADDR_FILE=/tmp/addr tailcat serve 80       # also write the address to a
 ```
 
 - Flags go before the port/service list.
+- Ports always map to the same port on localhost in v0.7.0.
+  `80:127.0.0.1:3000`-style mappings exist only on tailcat's main branch,
+  after v0.7.0; a released binary rejects them as an unknown service.
 - `--allow` gates the tunnel itself: unlisted keys never complete a
   connection. It's read once at startup.
 - `ssh` checks SSH public keys; `alice@github` fetches
@@ -68,7 +72,7 @@ TAILCAT_ADDR_FILE=/tmp/addr tailcat serve 80       # also write the address to a
 ## Connecting
 
 ```sh
-tailcat browse tc...                  # forward a free local port to :80 and open a browser
+tailcat browse tc...                  # forward a free local port to :80 and open a browser (needs port 80 served)
 tailcat forward tc... 8080            # local 8080 → remote 8080
 tailcat forward tc... 18080:80        # local 18080 → remote 80
 tailcat ssh user@tc...                # system ssh via a ProxyCommand
@@ -81,6 +85,8 @@ Client modes use the `client-default` key automatically if it exists;
 otherwise they use an ephemeral key, which `--allow` will reject.
 
 ## Identity in your own code
+
+This API is on tailcat's main branch, after v0.7.0.
 
 Embedding tailcat as a Go library (`github.com/tailscale/tailcat`):
 `tailcat.Server{AllowClient: func(key.NodePublic) bool}` admits clients, and
