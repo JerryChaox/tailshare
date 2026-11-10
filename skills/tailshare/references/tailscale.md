@@ -34,16 +34,21 @@ tailscale funnel reset
 - **Phones** work through the Tailscale iOS/Android apps; Tailcat has no
   phone client.
 
-## Pattern: a team machine, kept apart from your personal tailnet
+## Pattern: a team workspace, kept apart from your personal tailnet
 
-Use this when a team works on one always-on machine (a cloud VM running a
-shared app or agent sessions). You want to use it from your own devices, but
-teammates must not reach your devices, or each other.
+Use this when a team works in one shared environment that runs an app or
+agent sessions. You want to use it from your own devices, but teammates must
+not reach your devices, or each other.
+
+The workspace can be anything that runs `tailscaled`: a cloud VM, a dev box
+or home server, a local VM, or a container. In a container, use the
+`tailscale/tailscale` image or run `tailscaled --tun=userspace-networking`,
+and join with an auth key tagged `tag:workspace`.
 
 ```
  YOUR PERSONAL TAILNET        TEAM TAILNET
 ┌─────────────────────┐     ┌───────────────────────────────┐
-│  your other devices │     │        team VM                │
+│  your other devices │     │        team workspace         │
 │         │           │     │  ┌─────────────────────┐      │
 │      your Mac ══════╪═════╪═▶│ shared app :6768    │      │
 │                     │share│  └─────────────────────┘      │
@@ -52,15 +57,15 @@ teammates must not reach your devices, or each other.
                             │  teammate A      teammate B   │
                             │     ✕ ───────────── ✕         │
                             └───────────────────────────────┘
- ═══▶ allowed, connects directly to the VM    ✕──✕ blocked by the team policy
+ ═══▶ allowed, direct to the workspace     ✕──✕ blocked by the team policy
 ```
 
 Setup:
 
-1. Create a separate **team tailnet**. Put the VM in it with a tag (say
+1. Create a separate **team tailnet**. Put the workspace in it with a tag (say
    `tag:workspace`) and invite teammates as users.
 2. Replace the team tailnet's default allow-all policy with a grant that
-   only lets the team reach the VM's port:
+   only lets the team reach the workspace's port:
 
    ```json
    {
@@ -72,34 +77,34 @@ Setup:
    }
    ```
 
-   Nothing else is granted, so teammates can't reach each other and the VM
-   can't reach them. Add `tcp:22` or an `ssh` rule only if agents need a
+   Nothing else is granted, so teammates can't reach each other and the
+   workspace can't reach them. Add `tcp:22` or an `ssh` rule only if agents need a
    shell.
-3. **Share the VM into your personal tailnet** (admin console → Machines →
-   the VM → Share) and accept it with your personal account. Your Mac then
-   reaches the VM, and your personal devices stay invisible to the team.
+3. **Share the workspace into your personal tailnet** (admin console → Machines →
+   the workspace → Share) and accept it with your personal account. Your Mac then
+   reaches the workspace, and your personal devices stay invisible to the team.
 
 | Connection | Result |
 |---|---|
-| Your Mac → VM | Allowed, through the share |
-| Teammate → VM | Allowed, on the granted port only |
+| Your Mac → workspace | Allowed, through the share |
+| Teammate → workspace | Allowed, on the granted port only |
 | Teammate → your Mac or your other devices | Blocked, different tailnet |
 | Teammate ↔ teammate | Blocked by the team policy |
-| VM → your Mac | Blocked, shared machines can't start connections |
-| VM → teammates | Blocked by the team policy |
+| Workspace → your Mac | Blocked, shared machines can't start connections |
+| Workspace → teammates | Blocked by the team policy |
 | Your Mac → your other devices | Unchanged |
 
-Everyone talks to the same service on the VM, so they all see the same
+Everyone talks to the same service on the workspace, so they all see the same
 state (for example, the same session list). Tailscale's coordination
 server only sets up connections, and its relays are a fallback; traffic
 stays end-to-end encrypted.
 
 **Test the two parts that can be wrong:**
 
-- The share: from your Mac, reach `<vm>:6768`. From the VM, try to reach
+- The share: from your Mac, reach `<workspace>:6768`. From the workspace, try to reach
   your Mac (it should fail).
-- The policy: from teammate A, reach `<vm>:6768` (it should work), then
-  teammate B and another VM port (both should fail). Test with real
+- The policy: from teammate A, reach `<workspace>:6768` (it should work), then
+  teammate B and another workspace port (both should fail). Test with real
   connections (`curl`, `nc -vz`): `tailscale ping` checks the network path
   and doesn't go through the policy, so it isn't a policy test.
 

@@ -8,7 +8,7 @@ Ask your agent things like:
 - "Let Alice see the app on port 3000."
 - "Let Bob's agent SSH in and fix the failing test."
 - "Connect me to the environment Carol sent me: tc..."
-- "Set up a team VM my teammates can use without seeing my other devices."
+- "Set up a shared workspace my teammates can use without seeing my other devices."
 
 It picks the right tool for the job:
 
@@ -59,7 +59,7 @@ skills/tailshare/      the agent skill
   SKILL.md             which tool to use, share/join recipes, safety rules
   references/
     tailcat.md         commands, keys, stable addresses, gotchas
-    tailscale.md       serve, funnel, node sharing, SSH, the team-VM pattern
+    tailscale.md       serve, funnel, node sharing, SSH, the team-workspace pattern
     browser.md         opening a shared web app from a browser, nothing installed
 ```
 
