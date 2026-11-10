@@ -45,18 +45,23 @@ each other, and a WireGuard key is their identity.
 
 ```mermaid
 flowchart LR
-    G1["Collaborator A<br/>+ their agent"]
-    G2["Collaborator B<br/>+ their agent"]
-    ME["You<br/>(other devices stay private)"]
-    R(["Relay<br/>forwards encrypted packets,<br/>tries a direct path"])
-    ENV[("Your environment<br/>web app ports · agent shell<br/>laptop, VM, dev box or container")]
+    subgraph people[" "]
+        direction TB
+        ME["You"]
+        A["Collaborator A<br/>+ their agent"]
+        B["Collaborator B<br/>+ their agent"]
+    end
+    R(["Relay<br/>encrypted; direct path when possible"])
+    ENV["<b>Your environment</b><br/>web app · agent shell<br/>laptop, VM, dev box, container"]
 
-    G1 -- "key on the allow list" --> R
-    G2 -- "key on the allow list" --> R
-    ME -- "own key / shared device" --> R
+    ME -- "own key" --> R
+    A -- "allowed key" --> R
+    B -- "allowed key" --> R
     R ==> ENV
-    G1 -. "✕ no path" .- G2
 ```
+
+Guests only ever reach the environment: not each other, and not your other
+devices. Nothing in the picture listens on the public internet.
 
 1. **Join:** the guest makes a key pair and sends you only the public half
    (Tailcat `nodekey:...`), or signs in with their Tailscale account.
