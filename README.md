@@ -64,9 +64,12 @@ Guests only ever reach the environment: not each other, and not your other
 devices. Nothing in the picture listens on the public internet.
 
 1. **Join:** the guest makes a key pair and sends you only the public half
-   (Tailcat `nodekey:...`), or signs in with their Tailscale account.
-2. **Allow:** you add that key to `--allow` (Tailcat), or grant that user one
-   port on the workspace (Tailscale policy).
+   (Tailcat `nodekey:...`), or signs in with their Tailscale account. With a
+   Tailcat invite they send nothing: they paste your invite into their agent
+   (or run one command), which makes the key and knocks, and tailcat tells
+   you which key knocked.
+2. **Allow:** you add that key to `--allow` (Tailcat; with an invite you just
+   say yes), or grant that user one port on the workspace (Tailscale policy).
 3. **Connect:** both sides dial out to a relay, so nothing listens on the
    internet. The WireGuard handshake needs the matching private key, so a
    copied public key can't impersonate anyone.
@@ -78,7 +81,7 @@ devices. Nothing in the picture listens on the public internet.
 |---|---|---|
 | Identity | client key `nodekey:...` | account + device |
 | Who gets in | `--allow` list, SSH keys | policy grants |
-| Invite | send the `tc...` address, add their key | invite to a team tailnet |
+| Invite | send an invite, say yes when they knock (or swap keys by hand) | invite to a team tailnet |
 | Isolation between guests | built in (no tailnet) | grant nothing between them |
 | Best for | ad-hoc, no accounts, browser-only guests | ongoing teams, phones, fine-grained policy |
 
@@ -88,6 +91,9 @@ devices. Nothing in the picture listens on the public internet.
 .claude-plugin/        plugin and marketplace manifests
 skills/tailshare/      the agent skill
   SKILL.md             which tool to use, share/join recipes, safety rules
+  scripts/
+    tailshare          host: invite lobby, approve/deny knocks, per-guest servers
+    join.sh            guest: install tailcat, knock, open the shared port
   references/
     tailcat.md         commands, keys, stable addresses, gotchas
     tailscale.md       serve, funnel, node sharing, SSH, the team-workspace pattern

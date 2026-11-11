@@ -1,0 +1,204 @@
+#!/bin/sh
+# Invite guests to this machine's ports over tailcat, with no key exchange by hand.
+#
+# A "lobby" tailcat server runs this script for each connection (exec service).
+# tailcat hands it the guest's authenticated node key, so the guest only knocks;
+# once the host approves, the guest gets its own server allow-listed to that key.
+set -eu
+
+STATE=${TAILSHARE_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/tailshare}
+KNOCK_TIMEOUT=${TAILSHARE_KNOCK_TIMEOUT:-600}
+JOIN_URL=${TAILSHARE_JOIN_URL:-https://raw.githubusercontent.com/JerryChaox/tailshare/main/skills/tailshare/scripts/join.sh}
+SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+
+die() { echo "tailshare: $*" >&2; exit 1; }
+alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
+wait_file() {
+	i=0
+	while [ ! -s "$1" ]; do
+		i=$((i + 1)); [ "$i" -gt 60 ] && return 1; sleep 0.5
+	done
+}
+answer() { printf '%s\n' "$2" >"$1/answer.tmp" && mv "$1/answer.tmp" "$1/answer"; }
+
+# Resolve a pending knock by id or by (self-reported) name.
+knock_dir() {
+	[ -n "${1:-}" ] || die "which guest? (tailshare list)"
+	[ -f "$STATE/knocks/$1/key" ] && { echo "$STATE/knocks/$1"; return; }
+	found=
+	for d in "$STATE"/knocks/*/; do
+		[ -f "$d/key" ] && [ "$(cat "$d/name")" = "$1" ] || continue
+		[ -z "$found" ] || die "more than one guest named $1; use the id"
+		found=${d%/}
+	done
+	[ -n "$found" ] || die "no pending knock for $1"
+	echo "$found"
+}
+
+guest_pid() {
+	[ -f "$STATE/guests/$1.pid" ] && { echo "$STATE/guests/$1.pid"; return; }
+	for f in "$STATE"/guests/*.name; do
+		[ -f "$f" ] && [ "$(cat "$f")" = "$1" ] && { echo "${f%.name}.pid"; return; }
+	done
+	die "no guest $1"
+}
+
+cmd_invite() {
+	[ $# -ge 1 ] || die "usage: tailshare invite <port>[,<port>...]"
+	command -v tailcat >/dev/null || die "tailcat is not installed (brew install tailcat)"
+	ports=$(echo "$*" | tr ' ' ',')
+	case $ports in *[!0-9,]*) die "ports only, e.g. 3000 or 3000,5173: $ports" ;; esac
+	mkdir -p "$STATE/knocks" "$STATE/guests" "$STATE/keys"
+	chmod 700 "$STATE"
+	alive "$STATE/lobby.pid" && die "a lobby is already open; run 'tailshare close' first"
+	echo "$ports" >"$STATE/ports"
+	rm -f "$STATE/lobby.addr"
+	# --key=new: a fresh lobby address per invite, so an old invite stops working.
+	TAILSHARE_STATE=$STATE TAILCAT_ADDR_FILE=$STATE/lobby.addr \
+		nohup tailcat serve --key=new exec -- "$SELF" _knock >"$STATE/lobby.log" 2>&1 &
+	echo $! >"$STATE/lobby.pid"
+	wait_file "$STATE/lobby.addr" || die "lobby did not start; see $STATE/lobby.log"
+	lobby=$(cat "$STATE/lobby.addr")
+	port=${ports%%,*}
+	cat <<EOF
+Lobby open for ports $ports. Send the guest ONE of these, privately (never post it):
+
+--- for their AI agent -------------------------------------------------------
+Please connect me to a dev server someone is sharing with me over tailcat:
+1. Install tailcat if it's missing (macOS: brew install tailcat; others:
+   https://github.com/tailscale/tailcat/releases).
+2. If \`tailcat genkey --list\` has no client-default, run
+   \`tailcat genkey --client --key=client-default\`. Never share its private key file.
+3. Run \`echo <my name> | tailcat $lobby\`
+   It waits (up to $((KNOCK_TIMEOUT / 60)) min) for the host to approve, then prints
+   \`ok <address> <ports>\`; \`deny\` or \`timeout\` means stop.
+4. Run \`tailcat forward --open-browser <address> 0:$port\` in the background and
+   tell me the local URL it prints. Keep both tc addresses private.
+--- or, in their terminal ------------------------------------------------------
+curl -fsSL $JOIN_URL | sh -s -- $lobby
+-------------------------------------------------------------------------------
+Then wait for knocks: tailshare wait-knock   (approve with: tailshare approve <id>)
+EOF
+}
+
+# Runs inside the lobby, once per guest connection; stdio is the connection.
+cmd__knock() {
+	IFS= read -r name || true
+	name=$(printf %s "${name:-}" | tr -cd 'A-Za-z0-9._-' | cut -c1-32)
+	key=${TAILCAT_PEER_KEY:?}
+	id=$(printf %s "$key" | sed 's/^nodekey://' | cut -c1-8)
+	if alive "$STATE/guests/$id.pid"; then
+		echo "ok $(cat "$STATE/guests/$id.addr") $(cat "$STATE/guests/$id.ports")"
+		return
+	fi
+	k=$STATE/knocks/$id
+	mkdir -p "$k"
+	rm -f "$k/answer"
+	echo "${name:-guest}" >"$k/name"
+	echo "$key" >"$k/key"
+	i=0
+	while [ ! -s "$k/answer" ]; do
+		i=$((i + 1))
+		if [ "$i" -gt "$KNOCK_TIMEOUT" ]; then rm -rf "$k"; echo timeout; return; fi
+		sleep 1
+	done
+	cat "$k/answer"
+	rm -rf "$k"
+}
+
+cmd_wait_knock() {
+	while :; do
+		for f in "$STATE"/knocks/*/key; do
+			[ -f "$f" ] && [ ! -f "${f%/key}/answer" ] && { cmd_list; return; }
+		done
+		alive "$STATE/lobby.pid" || die "no lobby is open"
+		sleep 1
+	done
+}
+
+cmd_approve() {
+	k=$(knock_dir "${1:-}")
+	id=$(basename "$k")
+	g=$STATE/guests/$id
+	ports=$(cat "$STATE/ports")
+	keyfile=$STATE/keys/$id.private.json
+	# Fixed region: the guest's address stays the same if you approve them again later.
+	[ -f "$keyfile" ] || tailcat genkey --key="$keyfile" --fixed-region >/dev/null 2>&1
+	rm -f "$g.addr"
+	TAILCAT_ADDR_FILE=$g.addr nohup tailcat serve --key="$keyfile" --allow="$(cat "$k/key")" "$ports" >"$g.log" 2>&1 &
+	echo $! >"$g.pid"
+	echo "$ports" >"$g.ports"
+	cp "$k/name" "$g.name"
+	wait_file "$g.addr" || die "guest server did not start; see $g.log"
+	answer "$k" "ok $(cat "$g.addr") $ports"
+	echo "approved $(cat "$g.name") ($id) for ports $ports"
+}
+
+cmd_deny() {
+	k=$(knock_dir "${1:-}")
+	answer "$k" deny
+	echo "denied $(cat "$k/name") ($(basename "$k"))"
+}
+
+cmd_list() {
+	if alive "$STATE/lobby.pid"; then echo "lobby: open, ports $(cat "$STATE/ports")"; else echo "lobby: closed"; fi
+	for f in "$STATE"/knocks/*/key; do
+		[ -f "$f" ] && [ ! -f "${f%/key}/answer" ] || continue
+		d=${f%/key}
+		echo "knock: $(basename "$d")  name=$(cat "$d/name")  $(cat "$f")"
+	done
+	for f in "$STATE"/guests/*.pid; do
+		alive "$f" || continue
+		g=${f%.pid}
+		echo "guest: $(basename "$g")  name=$(cat "$g.name")  ports $(cat "$g.ports")"
+	done
+}
+
+cmd_close() {
+	for f in "$STATE"/knocks/*/key; do [ -f "$f" ] && answer "${f%/key}" deny; done
+	alive "$STATE/lobby.pid" && kill "$(cat "$STATE/lobby.pid")"
+	rm -f "$STATE/lobby.pid" "$STATE/lobby.addr"
+}
+
+cmd_revoke() {
+	p=$(guest_pid "${1:-}")
+	alive "$p" && kill "$(cat "$p")"
+	rm -f "$p"
+	echo "revoked $(basename "${p%.pid}")"
+}
+
+cmd_stop() {
+	cmd_close
+	for f in "$STATE"/guests/*.pid; do
+		[ -f "$f" ] || continue
+		alive "$f" && kill "$(cat "$f")"
+		rm -f "$f"
+	done
+	echo "all guests disconnected"
+}
+
+case ${1:-} in
+invite) shift; cmd_invite "$@" ;;
+_knock) cmd__knock ;;
+wait-knock) cmd_wait_knock ;;
+approve) cmd_approve "${2:-}" ;;
+deny) cmd_deny "${2:-}" ;;
+list) cmd_list ;;
+close) cmd_close; echo "lobby closed; approved guests stay connected" ;;
+revoke) cmd_revoke "${2:-}" ;;
+stop) cmd_stop ;;
+*)
+	cat >&2 <<EOF
+usage: tailshare <command>
+  invite <ports>   open a lobby and print the invite to send a guest
+  wait-knock       block until a guest knocks, then list pending knocks
+  approve <id>     give that guest their own server, allow-listed to their key
+  deny <id>        turn a knock away
+  list             lobby, pending knocks, connected guests
+  close            close the lobby (approved guests stay)
+  revoke <id>      disconnect one guest
+  stop             close the lobby and disconnect everyone
+EOF
+	exit 2
+	;;
+esac
