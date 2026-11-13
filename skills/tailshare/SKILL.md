@@ -48,6 +48,7 @@ the tunnel.
 
 ```sh
 scripts/tailshare invite 3000          # opens the lobby, prints the invite
+scripts/tailshare invite --region=tok 3000   # pin the relay near the guest
 scripts/tailshare wait-knock           # run in the background; exits when someone knocks
 scripts/tailshare approve <id|name>    # or: deny <id|name>
 scripts/tailshare list | close | revoke <id|name> | stop
@@ -62,6 +63,22 @@ scripts/tailshare list | close | revoke <id|name> | stop
    the user's explicit yes**: the name is whatever the guest typed.
 3. `approve`, then rerun `wait-knock` for the next guest. `close` the lobby
    when everyone is in; approved guests stay connected until `revoke`/`stop`.
+
+**Relay region.** `invite` prints the relay it picked. Until a direct path
+forms (never, behind a proxy or TUN that eats UDP), every request crosses that
+relay, so a far one makes the app crawl or time out. The auto pick measures
+latency, which a local proxy fakes, so it can land on another continent. When
+the guest is far from the printed relay, rerun with `--region=<code>`
+(`tailcat genkey --region=list`; e.g. `tok` for East Asia). The region is baked
+into each guest's key, so `revoke` and re-approve an existing guest only after
+deleting `$TAILSHARE_STATE/keys/<id>.private.json`.
+
+**The app's own login still applies.** The tunnel only carries bytes; an app
+that authenticates browsers will show its login (or hang on a splash screen)
+until the guest signs in. Give the guest the app's own invite, on the local URL
+the guest's `forward` printed. T3 Code: `t3 auth pairing create --base-url
+http://localhost:<guest port>`, then the guest opens the printed `/pair#token=`
+link.
 
 Each guest gets a separate server, so adding one never restarts anyone
 else's. State lives in `~/.local/state/tailshare` (`TAILSHARE_STATE`).

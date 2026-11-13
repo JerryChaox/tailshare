@@ -101,5 +101,11 @@ each guest into an app as themselves) with no passwords.
 - Adding a guest means restarting `serve` with the new `--allow` list.
 - Relay latency depends on the region: guests far from it feel it on every
   request until a direct path forms (browsers never get one).
+- `--region=auto` picks by measured latency. A local proxy or TUN (Clash,
+  Surge, corporate VPN) answers every probe in ~1 ms, so the pick is arbitrary
+  (seen: San Francisco for two people in Asia, with requests timing out). The
+  same setups usually block UDP, so no direct path forms either. Pin the
+  region next to the guest: `genkey --region=tok`, or `tailshare invite
+  --region=tok`.
 - A DNS TXT record (`tailcat=tc...`) can stand in for the address, but it's
   public: only do that with `--allow` or SSH keys in place.

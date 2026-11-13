@@ -43,8 +43,17 @@ guest_pid() {
 	die "no guest $1"
 }
 
+# Bake a relay region into a key: the one picked at invite, else the closest by latency.
+genkey() {
+	region=$(cat "$STATE/region" 2>/dev/null || true)
+	if [ -n "$region" ]; then set -- "$1" --region="$region"; else set -- "$1" --fixed-region; fi
+	tailcat genkey --key="$1" "$2" >/dev/null 2>&1
+}
+
 cmd_invite() {
-	[ $# -ge 1 ] || die "usage: tailshare invite <port>[,<port>...]"
+	region=
+	case ${1:-} in --region=*) region=${1#--region=}; shift ;; esac
+	[ $# -ge 1 ] || die "usage: tailshare invite [--region=<code>] <port>[,<port>...]"
 	command -v tailcat >/dev/null || die "tailcat is not installed (brew install tailcat)"
 	ports=$(echo "$*" | tr ' ' ',')
 	case $ports in *[!0-9,]*) die "ports only, e.g. 3000 or 3000,5173: $ports" ;; esac
@@ -52,15 +61,19 @@ cmd_invite() {
 	chmod 700 "$STATE"
 	alive "$STATE/lobby.pid" && die "a lobby is already open; run 'tailshare close' first"
 	echo "$ports" >"$STATE/ports"
-	rm -f "$STATE/lobby.addr"
-	# --key=new: a fresh lobby address per invite, so an old invite stops working.
+	if [ -n "$region" ]; then echo "$region" >"$STATE/region"; else rm -f "$STATE/region"; fi
+	rm -f "$STATE/lobby.addr" "$STATE/keys/lobby.private.json"
+	# A fresh lobby key per invite, so an old invite stops working.
+	genkey "$STATE/keys/lobby.private.json" || die "bad region: $region (tailcat genkey --region=list)"
 	TAILSHARE_STATE=$STATE TAILCAT_ADDR_FILE=$STATE/lobby.addr \
-		nohup tailcat serve --key=new exec -- "$SELF" _knock >"$STATE/lobby.log" 2>&1 &
+		nohup tailcat serve --key="$STATE/keys/lobby.private.json" exec -- "$SELF" _knock >"$STATE/lobby.log" 2>&1 &
 	echo $! >"$STATE/lobby.pid"
 	wait_file "$STATE/lobby.addr" || die "lobby did not start; see $STATE/lobby.log"
 	lobby=$(cat "$STATE/lobby.addr")
 	port=${ports%%,*}
+	relay=$(sed -n 's/.*relay region //p' "$STATE/lobby.log" | head -1)
 	cat <<EOF
+Relay: ${relay:-unknown}. Guests far from it get slow pages; pick another with --region=<code>.
 Lobby open for ports $ports. Send the guest ONE of these, privately (never post it):
 
 --- for their AI agent -------------------------------------------------------
@@ -122,8 +135,8 @@ cmd_approve() {
 	g=$STATE/guests/$id
 	ports=$(cat "$STATE/ports")
 	keyfile=$STATE/keys/$id.private.json
-	# Fixed region: the guest's address stays the same if you approve them again later.
-	[ -f "$keyfile" ] || tailcat genkey --key="$keyfile" --fixed-region >/dev/null 2>&1
+	# The region is baked into the key, so the guest's address survives a re-approve.
+	[ -f "$keyfile" ] || genkey "$keyfile"
 	rm -f "$g.addr"
 	TAILCAT_ADDR_FILE=$g.addr nohup tailcat serve --key="$keyfile" --allow="$(cat "$k/key")" "$ports" >"$g.log" 2>&1 &
 	echo $! >"$g.pid"
@@ -190,7 +203,9 @@ stop) cmd_stop ;;
 *)
 	cat >&2 <<EOF
 usage: tailshare <command>
-  invite <ports>   open a lobby and print the invite to send a guest
+  invite [--region=<code>] <ports>
+                   open a lobby and print the invite to send a guest
+                   (relay regions: tailcat genkey --region=list)
   wait-knock       block until a guest knocks, then list pending knocks
   approve <id>     give that guest their own server, allow-listed to their key
   deny <id>        turn a knock away
