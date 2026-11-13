@@ -17,6 +17,9 @@ It picks the right tool for the job:
   ad-hoc sharing with anyone.
 - **[Tailscale](https://tailscale.com)**: stable names, ACLs, phone apps, and
   public HTTPS via Funnel. Good for ongoing teams.
+- **[Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)**
+  (`tailshare publish`): a public HTTPS URL with no account. Only for apps
+  that have their own login, since anyone with the URL reaches them.
 
 Then it runs the commands with safe defaults: an allow-list of keys,
 explicit ports, and no public addresses.
@@ -36,7 +39,8 @@ Other agents that read `SKILL.md` skills: copy
 [`skills/tailshare`](skills/tailshare) into that agent's skills folder.
 
 You also need `tailcat` (`brew install tailcat`; other platforms are listed in
-[tailcat.md](skills/tailshare/references/tailcat.md)) and/or `tailscale`.
+[tailcat.md](skills/tailshare/references/tailcat.md)) and/or `tailscale`;
+`publish` needs `cloudflared` (`brew install cloudflared`).
 
 ## How it works
 
