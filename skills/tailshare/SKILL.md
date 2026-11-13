@@ -29,6 +29,7 @@ what they need to reach.
 | Team shares one workspace (VM, dev box, container); keep your own devices private | Tailscale team tailnet + share the workspace to yourself (references/tailscale.md, "team workspace") |
 | Guest is on a phone | Tailscale |
 | Anyone on the internet should open it | Tailscale Funnel |
+| App has its own login (T3 Code, Grafana…) and the tailcat relay is too slow for it | `tailshare publish` (Cloudflare quick tunnel) |
 
 If the user already runs Tailscale and the guest does too, prefer Tailscale.
 Otherwise default to Tailcat. Check what's installed with
@@ -66,12 +67,18 @@ scripts/tailshare list | close | revoke <id|name> | stop
 
 **Relay region.** `invite` prints the relay it picked. Until a direct path
 forms (never, behind a proxy or TUN that eats UDP), every request crosses that
-relay, so a far one makes the app crawl or time out. The auto pick measures
-latency, which a local proxy fakes, so it can land on another continent. When
-the guest is far from the printed relay, rerun with `--region=<code>`
-(`tailcat genkey --region=list`; e.g. `tok` for East Asia). The region is baked
-into each guest's key, so `revoke` and re-approve an existing guest only after
-deleting `$TAILSHARE_STATE/keys/<id>.private.json`.
+relay. The auto pick measures latency, which a local proxy fakes, so the pick
+is arbitrary. When host and guests are on the same continent, pin a relay
+there with `--region=<code>` (`tailcat genkey --region=list`). When they are
+on different continents one leg crosses the ocean wherever the relay is, so
+the region matters little. The region is baked into each guest's key: to move
+an existing guest, delete `$TAILSHARE_STATE/keys/<id>.private.json` before
+re-approving.
+
+**Heavy apps.** tailcat's default relays are free and rate-limited. A chatty
+app (long-lived WebSockets, big bundles, like T3 Code) can stall on them, with
+requests timing out, when no direct path forms. If the app has its own login,
+`publish` it instead (below).
 
 **The app's own login still applies.** The tunnel only carries bytes; an app
 that authenticates browsers will show its login (or hang on a splash screen)
@@ -82,6 +89,19 @@ link.
 
 Each guest gets a separate server, so adding one never restarts anyone
 else's. State lives in `~/.local/state/tailshare` (`TAILSHARE_STATE`).
+
+### Public URL for an app with its own login
+
+```sh
+scripts/tailshare publish 3000      # prints https://….trycloudflare.com
+scripts/tailshare unpublish 3000    # takes it down (stop does too)
+```
+
+A Cloudflare quick tunnel (`cloudflared`, no account): fast from anywhere,
+nothing for the guest to install. It has **no key gate**: anyone who gets the
+URL reaches the port, and the app's login is the only lock. Never publish a
+dev server, admin tool or shell without one. The URL changes on every
+publish and carries no uptime guarantee.
 
 ### By hand
 
@@ -147,6 +167,8 @@ https://tailscale.github.io/tailcat/ already works.
   user who ran `serve`, with all its files and credentials. For untrusted
   agents, run `serve` as a dedicated user, in a container or VM, or force a
   single command (`serve ... ssh -- ./task.sh`).
+- **`publish` only behind the app's own login.** A quick tunnel URL lets
+  anyone in; there is no `--allow`. `unpublish` when done.
 - **Serve only what's needed.** Name ports explicitly; avoid `all` and
   `exit-node` unless the user asks for them.
 - `--allow` is read at startup: to add a guest, restart `serve` with the new

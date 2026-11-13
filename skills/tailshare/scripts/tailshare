@@ -165,6 +165,10 @@ cmd_list() {
 		g=${f%.pid}
 		echo "guest: $(basename "$g")  name=$(cat "$g.name")  ports $(cat "$g.ports")"
 	done
+	for f in "$STATE"/published/*.pid; do
+		alive "$f" || continue
+		echo "published: $(basename "${f%.pid}")  $(cat "${f%.pid}.url")"
+	done
 }
 
 cmd_close() {
@@ -180,14 +184,51 @@ cmd_revoke() {
 	echo "revoked $(basename "${p%.pid}")"
 }
 
+# Public HTTPS URL through a Cloudflare quick tunnel. No key gate: anyone with the
+# URL reaches the port, so only for apps that make browsers sign in.
+cmd_publish() {
+	port=${1:-}
+	case $port in '' | *[!0-9]*) die "usage: tailshare publish <port>" ;; esac
+	command -v cloudflared >/dev/null || die "cloudflared is not installed (brew install cloudflared)"
+	mkdir -p "$STATE/published"
+	chmod 700 "$STATE"
+	p=$STATE/published/$port
+	alive "$p.pid" && { echo "already published: $(cat "$p.url")"; return; }
+	rm -f "$p.url"
+	nohup cloudflared tunnel --no-autoupdate --url "http://127.0.0.1:$port" >"$p.log" 2>&1 &
+	echo $! >"$p.pid"
+	i=0
+	until url=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$p.log" | head -1) && [ -n "$url" ]; do
+		i=$((i + 1)); [ "$i" -gt 60 ] && die "tunnel did not start; see $p.log"; sleep 0.5
+	done
+	echo "$url" >"$p.url"
+	cat <<EOF
+Port $port is public at $url
+Anyone with this URL reaches the port: there is no key check, only the app's own login.
+Stop with: tailshare unpublish $port
+EOF
+}
+
+cmd_unpublish() {
+	p=$STATE/published/${1:?usage: tailshare unpublish <port>}
+	alive "$p.pid" && kill "$(cat "$p.pid")"
+	rm -f "$p.pid" "$p.url"
+	echo "unpublished $1"
+}
+
 cmd_stop() {
+	for f in "$STATE"/published/*.pid; do
+		[ -f "$f" ] || continue
+		alive "$f" && kill "$(cat "$f")"
+		rm -f "$f" "${f%.pid}.url"
+	done
 	cmd_close
 	for f in "$STATE"/guests/*.pid; do
 		[ -f "$f" ] || continue
 		alive "$f" && kill "$(cat "$f")"
 		rm -f "$f"
 	done
-	echo "all guests disconnected"
+	echo "all guests disconnected, nothing published"
 }
 
 case ${1:-} in
@@ -199,6 +240,8 @@ deny) cmd_deny "${2:-}" ;;
 list) cmd_list ;;
 close) cmd_close; echo "lobby closed; approved guests stay connected" ;;
 revoke) cmd_revoke "${2:-}" ;;
+publish) cmd_publish "${2:-}" ;;
+unpublish) cmd_unpublish "${2:-}" ;;
 stop) cmd_stop ;;
 *)
 	cat >&2 <<EOF
@@ -212,7 +255,9 @@ usage: tailshare <command>
   list             lobby, pending knocks, connected guests
   close            close the lobby (approved guests stay)
   revoke <id>      disconnect one guest
-  stop             close the lobby and disconnect everyone
+  publish <port>   public HTTPS URL via a Cloudflare quick tunnel (apps with a login only)
+  unpublish <port> take that URL down
+  stop             close the lobby, disconnect everyone, unpublish everything
 EOF
 	exit 2
 	;;

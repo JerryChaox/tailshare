@@ -103,9 +103,8 @@ each guest into an app as themselves) with no passwords.
   request until a direct path forms (browsers never get one).
 - `--region=auto` picks by measured latency. A local proxy or TUN (Clash,
   Surge, corporate VPN) answers every probe in ~1 ms, so the pick is arbitrary
-  (seen: San Francisco for two people in Asia, with requests timing out). The
-  same setups usually block UDP, so no direct path forms either. Pin the
-  region next to the guest: `genkey --region=tok`, or `tailshare invite
-  --region=tok`.
+  among regions. The same setups usually block UDP, so no direct path forms
+  and everything rides the (free, rate-limited) relay. Pin the region with
+  `genkey --region=<code>` or `tailshare invite --region=<code>`.
 - A DNS TXT record (`tailcat=tc...`) can stand in for the address, but it's
   public: only do that with `--allow` or SSH keys in place.
